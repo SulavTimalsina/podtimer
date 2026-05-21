@@ -105,8 +105,8 @@
         <div class="muted">Unlock this session now or get monthly access.</div>
       </div>
       <div class="pay-actions">
-        <a href="https://buy.stripe.com/test_cNifZhemI8FS2NLgVe3ks03">Unlock this session $9</a>
-        <a href="https://buy.stripe.com/test_28E7sLfqM5tG885dJ23ks02">Get monthly access $19/mo</a>
+        <a href="https://buy.stripe.com/test_eVqeVd6UgaO0col5cw3ks04">Unlock this session $1</a>
+        <a href="https://buy.stripe.com/test_bJecN50vS1dqcolbAU3ks05">Get monthly access $9/mo</a>
       </div>
     </section>
   </main>
@@ -124,8 +124,8 @@
       <h2>Free session ended</h2>
       <p>Unlock the control panel to keep running this podcast timer session.</p>
       <div class="pay-actions">
-        <a href="https://buy.stripe.com/test_cNifZhemI8FS2NLgVe3ks03">Unlock this session $9</a>
-        <a href="https://buy.stripe.com/test_28E7sLfqM5tG885dJ23ks02">Get monthly access $19/mo</a>
+        <a href="https://buy.stripe.com/test_eVqeVd6UgaO0col5cw3ks04">Unlock this session $1</a>
+        <a href="https://buy.stripe.com/test_bJecN50vS1dqcolbAU3ks05">Get monthly access $9/mo</a>
       </div>
     </div>
   </div>
@@ -136,6 +136,7 @@
     const presets = [["1m",60],["2m",120],["5m",300],["10m",600],["15m",900],["30m",1800],["1h",3600]];
     const quickMessages = ["Wrap up", "30 seconds", "Pause", "Mic issue", "Great point"];
     const freeEndsAt = Date.now() + 5 * 60 * 1000;
+    applyPaymentUnlock();
     let room = getRoom();
     let total = 0, timeLeft = 0, running = false, segmentName = "", messageText = "", active = -1, timer = null;
     let queue = loadQueue();
@@ -148,6 +149,15 @@
     function sync() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state())); }
     function joinRoom() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "join", room })); }
     function isDisplay() { return location.hash.startsWith("#display"); }
+    function isUnlocked() { return localStorage.getItem("podtimerUnlocked") === "true"; }
+    function applyPaymentUnlock() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("unlock") === "session" || params.get("unlock") === "monthly") {
+        localStorage.setItem("podtimerUnlocked", "true");
+        params.delete("unlock");
+        history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash || "#control"}`);
+      }
+    }
     function getRoom() {
       const params = new URLSearchParams(window.location.search);
       const code = (params.get("room") || makeRoom()).toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -180,8 +190,13 @@
       $("connectionStatus").className = `status ${cls}`;
       $("displayStatus").textContent = text;
     }
-    function paywallOpen() { return $("paywall").classList.contains("show") && !isDisplay(); }
+    function paywallOpen() { return !isUnlocked() && $("paywall").classList.contains("show") && !isDisplay(); }
     function renderPaywall() {
+      if (isUnlocked()) {
+        $("freeBanner").textContent = "Session unlocked";
+        $("paywall").classList.remove("show");
+        return;
+      }
       const freeLeft = Math.max(0, Math.ceil((freeEndsAt - Date.now()) / 1000));
       $("freeBanner").textContent = `${Math.ceil(freeLeft / 60)} min free remaining`;
       $("paywall").classList.toggle("show", freeLeft === 0 && !isDisplay());
