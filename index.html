@@ -73,7 +73,8 @@
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
-    const ws = new WebSocket(`ws://${window.location.host}`);
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
     const presets = [["1m",60],["2m",120],["5m",300],["10m",600],["15m",900],["30m",1800],["1h",3600]];
     let total = 0, timeLeft = 0, running = false, segmentName = "", active = -1, timer = null;
     let queue = [{ name: "Intro", seconds: 300 }, { name: "Main segment", seconds: 900 }, { name: "Wrap", seconds: 120 }];
