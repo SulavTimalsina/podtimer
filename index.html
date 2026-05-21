@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Podtimer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#101214; --panel:#1a1d21; --line:#2c3238; --text:#f5f7fa; --muted:#9aa4af; --orange:#ff9f1c; --red:#ff3b30; --green:#3ddc97; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+    button, input { font: inherit; }
+    button { border: 1px solid var(--line); border-radius: 8px; background: #242932; color: var(--text); padding: 10px 14px; cursor: pointer; }
+    button:hover { background: #303742; }
+    input { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0c0e10; color: var(--text); padding: 10px 12px; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+    h1 { margin: 0; font-size: 24px; }
+    a { color: var(--muted); text-decoration: none; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+    .timer { font-family: "DM Mono", monospace; font-size: clamp(58px, 12vw, 132px); line-height: 1; letter-spacing: 0; margin: 10px 0 18px; }
+    .normal { color: var(--text); } .warning { color: var(--orange); } .danger { color: var(--red); }
+    .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    .presets, .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .primary { background: var(--green); border-color: var(--green); color: #06100b; font-weight: 700; }
+    .queue { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+    .queue li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
+    .queue li.active { border-color: var(--green); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .display { min-height: 100vh; display: none; place-items: center; padding: 5vw; text-align: center; }
+    .display .timer { font-size: clamp(86px, 21vw, 260px); }
+    .segment { font-size: clamp(24px, 5vw, 68px); margin-bottom: 20px; }
+    .bar { width: min(920px, 90vw); height: 14px; border-radius: 999px; overflow: hidden; background: #2b3037; margin: 28px auto 0; }
+    .fill { height: 100%; width: 0%; background: var(--green); transition: width .2s linear, background .2s; }
+    .dot { display: inline-block; width: .22em; height: .22em; border-radius: 50%; background: currentColor; margin-left: .25em; vertical-align: middle; opacity: 0; }
+    .danger .dot { animation: blink .8s steps(2, start) infinite; }
+    @keyframes blink { 50% { opacity: 1; } }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .wrap { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <main id="control" class="wrap">
+    <div class="top"><h1>Podtimer</h1><a href="#display">Display view</a></div>
+    <section class="grid">
+      <div class="panel">
+        <div id="segmentTitle" class="muted">No segment loaded</div>
+        <div id="controlTime" class="timer normal">00:00<span class="dot"></span></div>
+        <div class="controls">
+          <button id="start" class="primary">Start</button><button id="reset">Reset</button><button id="prev">Prev</button><button id="next">Next</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="muted">Presets</div>
+        <div class="presets row" id="presets"></div>
+        <div class="row"><input id="custom" placeholder="mm:ss" value="05:00"><button id="loadCustom">Load</button></div>
+      </div>
+      <div class="panel" style="grid-column:1/-1">
+        <div class="muted">Segment queue</div>
+        <div class="row"><input id="segName" placeholder="Segment name"><input id="segTime" placeholder="mm:ss"><button id="addSeg">Add</button></div>
+        <ul id="queue" class="queue"></ul>
+      </div>
+    </section>
+  </main>
+  <main id="display" class="display">
+    <div>
+      <div id="displaySegment" class="segment">Waiting for timer</div>
+      <div id="displayTime" class="timer normal">00:00<span class="dot"></span></div>
+      <div class="bar"><div id="progress" class="fill"></div></div>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const ws = new WebSocket(`ws://${window.location.host}`);
+    const presets = [["1m",60],["2m",120],["5m",300],["10m",600],["15m",900],["30m",1800],["1h",3600]];
+    let total = 0, timeLeft = 0, running = false, segmentName = "", active = -1, timer = null;
+    let queue = [{ name: "Intro", seconds: 300 }, { name: "Main segment", seconds: 900 }, { name: "Wrap", seconds: 120 }];
+
+    function fmt(s) { s = Math.max(0, Math.ceil(s)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; }
+    function parseTime(v) { const m = /^(\d{1,3}):([0-5]\d)$/.exec(v.trim()); return m ? (+m[1] * 60 + +m[2]) : 0; }
+    function tone(s) { return s <= 30 ? "danger" : s <= 60 ? "warning" : "normal"; }
+    function setTime(seconds, name = "Custom") { total = timeLeft = seconds; segmentName = name; running = false; sync(); renderControl(); }
+    function state() { return { timeLeft, running, segmentName, total }; }
+    function sync() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state())); }
+
+    function renderClock(el, seconds) {
+      el.className = `timer ${tone(seconds)}`;
+      el.innerHTML = `${fmt(seconds)}<span class="dot"></span>`;
+    }
+    function renderControl() {
+      $("segmentTitle").textContent = segmentName || "No segment loaded";
+      $("start").textContent = running ? "Pause" : "Start";
+      renderClock($("controlTime"), timeLeft);
+      $("queue").innerHTML = "";
+      queue.forEach((seg, i) => {
+        const li = document.createElement("li");
+        li.className = i === active ? "active" : "";
+        li.innerHTML = `<button>${seg.name}</button><span class="muted">${fmt(seg.seconds)}</span><button>Remove</button>`;
+        li.children[0].onclick = () => loadSegment(i);
+        li.children[2].onclick = () => { queue.splice(i, 1); if (active === i) active = -1; renderControl(); };
+        $("queue").appendChild(li);
+      });
+    }
+    function renderDisplay(s) {
+      $("displaySegment").textContent = s.segmentName || "Waiting for timer";
+      renderClock($("displayTime"), s.timeLeft || 0);
+      const pct = s.total ? Math.max(0, Math.min(100, (s.timeLeft / s.total) * 100)) : 0;
+      $("progress").style.width = `${pct}%`;
+      $("progress").style.background = s.timeLeft <= 30 ? "var(--red)" : s.timeLeft <= 60 ? "var(--orange)" : "var(--green)";
+    }
+    function loadSegment(i) { active = i; setTime(queue[i].seconds, queue[i].name); }
+    function nextSegment() { if (active + 1 < queue.length) loadSegment(active + 1); }
+    function prevSegment() { if (active > 0) loadSegment(active - 1); }
+    function tick() {
+      if (!running) return;
+      timeLeft = Math.max(0, timeLeft - 1);
+      if (timeLeft === 0) { running = false; nextSegment(); if (active > -1 && timeLeft > 0) running = true; }
+      renderControl(); sync();
+    }
+    function toggle() { running = !running && timeLeft > 0; renderControl(); sync(); }
+
+    presets.forEach(([label, sec]) => { const b = document.createElement("button"); b.textContent = label; b.onclick = () => setTime(sec, label); $("presets").appendChild(b); });
+    $("loadCustom").onclick = () => { const sec = parseTime($("custom").value); if (sec) setTime(sec); };
+    $("addSeg").onclick = () => { const sec = parseTime($("segTime").value), name = $("segName").value.trim(); if (sec && name) { queue.push({ name, seconds: sec }); $("segName").value = $("segTime").value = ""; renderControl(); } };
+    $("start").onclick = toggle; $("reset").onclick = () => setTime(total, segmentName || "Custom");
+    $("next").onclick = nextSegment; $("prev").onclick = prevSegment;
+    document.onkeydown = (e) => { if (e.target.matches("input")) return; if (e.code === "Space") { e.preventDefault(); toggle(); } if (e.key.toLowerCase() === "r") setTime(total, segmentName || "Custom"); if (e.key === "ArrowRight") nextSegment(); if (e.key === "ArrowLeft") prevSegment(); };
+    window.onhashchange = () => { const showDisplay = location.hash === "#display"; $("control").style.display = showDisplay ? "none" : "block"; $("display").style.display = showDisplay ? "grid" : "none"; };
+    ws.onmessage = (e) => { if (location.hash === "#display") renderDisplay(JSON.parse(e.data)); };
+    ws.onopen = sync;
+    setInterval(tick, 1000);
+    loadSegment(0);
+    window.onhashchange();
+  </script>
+</body>
+</html>
