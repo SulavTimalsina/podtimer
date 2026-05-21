@@ -14,6 +14,7 @@
     button, input { font: inherit; }
     button { border: 1px solid var(--line); border-radius: 8px; background: #242932; color: var(--text); padding: 10px 14px; cursor: pointer; }
     button:hover { background: #303742; }
+    button.copied { background: var(--green); border-color: var(--green); color: #06100b; }
     input { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0c0e10; color: var(--text); padding: 10px 12px; }
     .wrap { max-width: 980px; margin: 0 auto; padding: 28px; }
     .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
@@ -21,19 +22,29 @@
     a { color: var(--muted); text-decoration: none; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+    .now-panel { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: center; }
+    .now-side { border-left: 1px solid var(--line); padding-left: 18px; }
     .timer { font-family: "DM Mono", monospace; font-size: clamp(58px, 12vw, 132px); line-height: 1; letter-spacing: 0; margin: 10px 0 18px; }
     .normal { color: var(--text); } .warning { color: var(--orange); } .danger { color: var(--red); }
     .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
     .row input[readonly] { color: var(--muted); }
-    .presets, .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .presets, .controls, .quick-messages { display: flex; flex-wrap: wrap; gap: 8px; }
     .primary { background: var(--green); border-color: var(--green); color: #06100b; font-weight: 700; }
     .queue { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
-    .queue li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
-    .queue li.active { border-color: var(--green); }
+    .queue li { display: grid; grid-template-columns: 1fr auto auto auto auto auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
+    .queue li.active { border-color: var(--green); background: rgba(61,220,151,.08); box-shadow: inset 3px 0 0 var(--green); }
+    .queue li.next { border-color: rgba(255,159,28,.55); }
+    .queue button { padding: 8px 10px; }
+    .status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
+    .status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--orange); }
+    .status.connected::before { background: var(--green); }
+    .status.offline::before { background: var(--red); }
     .muted { color: var(--muted); font-size: 13px; }
     .display-message { min-height: 1.4em; margin-bottom: 18px; color: var(--orange); font-size: clamp(18px, 3.5vw, 42px); font-weight: 800; }
     .free-banner { display: flex; justify-content: center; border: 1px solid var(--orange); border-radius: 8px; background: rgba(255,159,28,.12); color: var(--orange); padding: 10px 14px; margin-bottom: 18px; font-weight: 700; }
-    .display { min-height: 100vh; display: none; place-items: center; padding: 5vw; text-align: center; }
+    .display { min-height: 100vh; display: none; place-items: center; padding: 5vw; text-align: center; transition: background .25s; }
+    .display.warning-bg { background: #1f170b; }
+    .display.danger-bg { background: #240d0b; }
     .display .timer { font-size: clamp(86px, 21vw, 260px); }
     .segment { font-size: clamp(24px, 5vw, 68px); margin-bottom: 20px; }
     .bar { width: min(920px, 90vw); height: 14px; border-radius: 999px; overflow: hidden; background: #2b3037; margin: 28px auto 0; }
@@ -46,13 +57,13 @@
     .pay-actions { display: grid; gap: 10px; }
     .pay-actions a { display: block; border-radius: 8px; padding: 13px 16px; background: var(--green); color: #06100b; font-weight: 800; }
     .pay-actions a + a { background: #242932; border: 1px solid var(--line); color: var(--text); }
-    .pay-footer { margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .pay-footer { margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: transparent; }
     .pay-footer .pay-actions { display: flex; flex-wrap: wrap; }
     .pay-footer .pay-actions a { padding: 10px 14px; }
     .dot { display: inline-block; width: .22em; height: .22em; border-radius: 50%; background: currentColor; margin-left: .25em; vertical-align: middle; opacity: 0; }
     .danger .dot { animation: blink .8s steps(2, start) infinite; }
     @keyframes blink { 50% { opacity: 1; } }
-    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .wrap { padding: 18px; } }
+    @media (max-width: 760px) { .grid, .now-panel { grid-template-columns: 1fr; } .now-side { border-left: 0; border-top: 1px solid var(--line); padding: 18px 0 0; } .wrap { padding: 18px; } }
   </style>
 </head>
 <body>
@@ -60,25 +71,29 @@
     <div class="top"><h1>Podtimer</h1><a href="#display">Display view</a></div>
     <div id="freeBanner" class="free-banner">5 min free remaining</div>
     <section class="grid">
-      <div class="panel">
-        <div id="segmentTitle" class="muted">No segment loaded</div>
-        <div id="controlTime" class="timer normal">00:00<span class="dot"></span></div>
-        <div class="controls">
-          <button id="start" class="primary">Start</button><button id="reset">Reset</button><button id="prev">Prev</button><button id="next">Next</button>
+      <div class="panel now-panel">
+        <div>
+          <div id="segmentTitle" class="muted">No segment loaded</div>
+          <div id="controlTime" class="timer normal">00:00<span class="dot"></span></div>
+          <div class="controls">
+            <button id="start" class="primary">Start</button><button id="reset">Reset</button><button id="prev">Prev</button><button id="next">Next</button>
+          </div>
+        </div>
+        <div class="now-side">
+          <div class="muted">Presets</div>
+          <div class="presets row" id="presets"></div>
+          <div class="row"><input id="custom" placeholder="mm:ss" value="05:00"><button id="loadCustom">Load</button></div>
         </div>
       </div>
-      <div class="panel">
-        <div class="muted">Presets</div>
-        <div class="presets row" id="presets"></div>
-        <div class="row"><input id="custom" placeholder="mm:ss" value="05:00"><button id="loadCustom">Load</button></div>
-      </div>
       <div class="panel" style="grid-column:1/-1">
-        <div class="muted">Display URL</div>
+        <div class="row" style="justify-content:space-between;margin-top:0"><div class="muted">Display URL</div><div id="connectionStatus" class="status">Connecting</div></div>
         <div class="row"><input id="displayUrl" readonly><button id="copyDisplayUrl">Copy</button></div>
+        <div id="nextPreview" class="muted" style="margin-top:14px">Next: none</div>
         <div class="muted">Segment queue</div>
         <div class="row"><input id="segName" placeholder="Segment name"><input id="segTime" placeholder="mm:ss"><button id="addSeg">Add</button></div>
         <ul id="queue" class="queue"></ul>
         <div class="muted" style="margin-top:18px">Display message</div>
+        <div class="quick-messages row" id="quickMessages"></div>
         <div class="row"><input id="messageText" placeholder="Message for display screen"><button id="showMessage">Show</button><button id="clearMessage">Clear</button></div>
       </div>
     </section>
@@ -116,9 +131,10 @@
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
     const presets = [["1m",60],["2m",120],["5m",300],["10m",600],["15m",900],["30m",1800],["1h",3600]];
+    const quickMessages = ["Wrap up", "30 seconds", "Pause", "Mic issue", "Great point"];
     const freeEndsAt = Date.now() + 5 * 60 * 1000;
     let total = 0, timeLeft = 0, running = false, segmentName = "", messageText = "", active = -1, timer = null;
-    let queue = [{ name: "Intro", seconds: 300 }, { name: "Main segment", seconds: 900 }, { name: "Wrap", seconds: 120 }];
+    let queue = loadQueue();
 
     function fmt(s) { s = Math.max(0, Math.ceil(s)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; }
     function parseTime(v) { const m = /^(\d{1,3}):([0-5]\d)$/.exec(v.trim()); return m ? (+m[1] * 60 + +m[2]) : 0; }
@@ -126,6 +142,20 @@
     function setTime(seconds, name = "Custom") { total = timeLeft = seconds; segmentName = name; running = false; sync(); renderControl(); }
     function state() { return { timeLeft, running, segmentName, total, messageText }; }
     function sync() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state())); }
+    function loadQueue() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("podtimerQueue"));
+        return Array.isArray(saved) && saved.length ? saved : defaultQueue();
+      }
+      catch { return defaultQueue(); }
+    }
+    function defaultQueue() { return [{ name: "Intro", seconds: 300 }, { name: "Main segment", seconds: 900 }, { name: "Wrap", seconds: 120 }]; }
+    function saveQueue() { localStorage.setItem("podtimerQueue", JSON.stringify(queue)); }
+    function saveMessageDraft() { localStorage.setItem("podtimerMessageDraft", $("messageText").value); }
+    function setStatus(text, cls) {
+      $("connectionStatus").textContent = text;
+      $("connectionStatus").className = `status ${cls}`;
+    }
     function paywallOpen() { return $("paywall").classList.contains("show") && location.hash !== "#display"; }
     function renderPaywall() {
       const freeLeft = Math.max(0, Math.ceil((freeEndsAt - Date.now()) / 1000));
@@ -142,13 +172,18 @@
       $("segmentTitle").textContent = segmentName || "No segment loaded";
       $("start").textContent = running ? "Pause" : "Start";
       renderClock($("controlTime"), timeLeft);
+      const next = active + 1 < queue.length ? queue[active + 1] : null;
+      $("nextPreview").textContent = next ? `Next: ${next.name} (${fmt(next.seconds)})` : "Next: none";
       $("queue").innerHTML = "";
       queue.forEach((seg, i) => {
         const li = document.createElement("li");
-        li.className = i === active ? "active" : "";
-        li.innerHTML = `<button>${seg.name}</button><span class="muted">${fmt(seg.seconds)}</span><button>Remove</button>`;
-        li.children[0].onclick = () => loadSegment(i);
-        li.children[2].onclick = () => { queue.splice(i, 1); if (active === i) active = -1; renderControl(); };
+        li.className = i === active ? "active" : i === active + 1 ? "next" : "";
+        const load = document.createElement("button"), time = document.createElement("span");
+        load.textContent = seg.name;
+        time.className = "muted";
+        time.textContent = fmt(seg.seconds);
+        li.append(load, time, queueButton("Up", () => moveSegment(i, -1)), queueButton("Down", () => moveSegment(i, 1)), queueButton("Copy", () => duplicateSegment(i)), queueButton("Remove", () => removeSegment(i)));
+        load.onclick = () => loadSegment(i);
         $("queue").appendChild(li);
       });
     }
@@ -156,13 +191,24 @@
       $("displayMessage").textContent = s.messageText || "";
       $("displaySegment").textContent = s.segmentName || "Waiting for timer";
       renderClock($("displayTime"), s.timeLeft || 0);
+      $("display").className = `display ${tone(s.timeLeft || 0)}-bg`;
       const pct = s.total ? Math.max(0, Math.min(100, (s.timeLeft / s.total) * 100)) : 0;
       $("progress").style.width = `${pct}%`;
       $("progress").style.background = s.timeLeft <= 30 ? "var(--red)" : s.timeLeft <= 60 ? "var(--orange)" : "var(--green)";
     }
+    function queueButton(text, fn) { const btn = document.createElement("button"); btn.textContent = text; btn.onclick = fn; return btn; }
     function loadSegment(i) { active = i; setTime(queue[i].seconds, queue[i].name); }
     function nextSegment() { if (active + 1 < queue.length) loadSegment(active + 1); }
     function prevSegment() { if (active > 0) loadSegment(active - 1); }
+    function moveSegment(i, dir) {
+      const j = i + dir;
+      if (j < 0 || j >= queue.length) return;
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+      if (active === i) active = j; else if (active === j) active = i;
+      saveQueue(); renderControl();
+    }
+    function duplicateSegment(i) { queue.splice(i + 1, 0, { ...queue[i], name: `${queue[i].name} copy` }); saveQueue(); renderControl(); }
+    function removeSegment(i) { queue.splice(i, 1); if (active === i) active = -1; if (active > i) active--; saveQueue(); renderControl(); }
     function tick() {
       if (!running || paywallOpen()) return;
       timeLeft = Math.max(0, timeLeft - 1);
@@ -172,24 +218,30 @@
     function toggle() { if (paywallOpen()) return; running = !running && timeLeft > 0; renderControl(); sync(); }
 
     presets.forEach(([label, sec]) => { const b = document.createElement("button"); b.textContent = label; b.onclick = () => setTime(sec, label); $("presets").appendChild(b); });
+    quickMessages.forEach((msg) => { const b = document.createElement("button"); b.textContent = msg; b.onclick = () => { if (paywallOpen()) return; messageText = msg; $("messageText").value = msg; saveMessageDraft(); sync(); }; $("quickMessages").appendChild(b); });
     $("loadCustom").onclick = () => { if (paywallOpen()) return; const sec = parseTime($("custom").value); if (sec) setTime(sec); };
-    $("addSeg").onclick = () => { if (paywallOpen()) return; const sec = parseTime($("segTime").value), name = $("segName").value.trim(); if (sec && name) { queue.push({ name, seconds: sec }); $("segName").value = $("segTime").value = ""; renderControl(); } };
+    $("addSeg").onclick = () => { if (paywallOpen()) return; const sec = parseTime($("segTime").value), name = $("segName").value.trim(); if (sec && name) { queue.push({ name, seconds: sec }); saveQueue(); $("segName").value = $("segTime").value = ""; renderControl(); } };
     $("start").onclick = toggle; $("reset").onclick = () => { if (!paywallOpen()) setTime(total, segmentName || "Custom"); };
     $("next").onclick = () => { if (!paywallOpen()) nextSegment(); }; $("prev").onclick = () => { if (!paywallOpen()) prevSegment(); };
     $("displayUrl").value = `${window.location.origin}${window.location.pathname}#display`;
     $("copyDisplayUrl").onclick = async () => {
       await navigator.clipboard.writeText($("displayUrl").value);
       $("copyDisplayUrl").textContent = "Copied";
-      setTimeout(() => $("copyDisplayUrl").textContent = "Copy", 1200);
+      $("copyDisplayUrl").classList.add("copied");
+      setTimeout(() => { $("copyDisplayUrl").textContent = "Copy"; $("copyDisplayUrl").classList.remove("copied"); }, 1200);
     };
-    $("showMessage").onclick = () => { if (paywallOpen()) return; messageText = $("messageText").value.trim(); sync(); };
-    $("clearMessage").onclick = () => { if (paywallOpen()) return; messageText = ""; $("messageText").value = ""; sync(); };
+    $("messageText").oninput = saveMessageDraft;
+    $("showMessage").onclick = () => { if (paywallOpen()) return; messageText = $("messageText").value.trim(); saveMessageDraft(); sync(); };
+    $("clearMessage").onclick = () => { if (paywallOpen()) return; messageText = ""; $("messageText").value = ""; saveMessageDraft(); sync(); };
     document.onkeydown = (e) => { if (e.target.matches("input") || paywallOpen()) return; if (e.code === "Space") { e.preventDefault(); toggle(); } if (e.key.toLowerCase() === "r") setTime(total, segmentName || "Custom"); if (e.key === "ArrowRight") nextSegment(); if (e.key === "ArrowLeft") prevSegment(); };
     window.onhashchange = () => { const showDisplay = location.hash === "#display"; $("control").style.display = showDisplay ? "none" : "block"; $("display").style.display = showDisplay ? "grid" : "none"; renderPaywall(); };
     ws.onmessage = (e) => { if (location.hash === "#display") renderDisplay(JSON.parse(e.data)); };
-    ws.onopen = sync;
+    ws.onopen = () => { setStatus("Connected", "connected"); sync(); };
+    ws.onclose = () => setStatus("Offline", "offline");
+    ws.onerror = () => setStatus("Connection error", "offline");
     setInterval(tick, 1000);
     setInterval(renderPaywall, 1000);
+    $("messageText").value = localStorage.getItem("podtimerMessageDraft") || "";
     loadSegment(0);
     renderPaywall();
     window.onhashchange();
