@@ -46,6 +46,9 @@
     .pay-actions { display: grid; gap: 10px; }
     .pay-actions a { display: block; border-radius: 8px; padding: 13px 16px; background: var(--green); color: #06100b; font-weight: 800; }
     .pay-actions a + a { background: #242932; border: 1px solid var(--line); color: var(--text); }
+    .pay-footer { margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .pay-footer .pay-actions { display: flex; flex-wrap: wrap; }
+    .pay-footer .pay-actions a { padding: 10px 14px; }
     .dot { display: inline-block; width: .22em; height: .22em; border-radius: 50%; background: currentColor; margin-left: .25em; vertical-align: middle; opacity: 0; }
     .danger .dot { animation: blink .8s steps(2, start) infinite; }
     @keyframes blink { 50% { opacity: 1; } }
@@ -77,6 +80,16 @@
         <ul id="queue" class="queue"></ul>
         <div class="muted" style="margin-top:18px">Display message</div>
         <div class="row"><input id="messageText" placeholder="Message for display screen"><button id="showMessage">Show</button><button id="clearMessage">Clear</button></div>
+      </div>
+    </section>
+    <section class="panel pay-footer">
+      <div>
+        <div>Need more time?</div>
+        <div class="muted">Unlock this session now or get monthly access.</div>
+      </div>
+      <div class="pay-actions">
+        <a href="https://buy.stripe.com/test_cNifZhemI8FS2NLgVe3ks03">Unlock this session $9</a>
+        <a href="https://buy.stripe.com/test_28E7sLfqM5tG885dJ23ks02">Get monthly access $19/mo</a>
       </div>
     </section>
   </main>
