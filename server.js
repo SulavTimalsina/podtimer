@@ -6,6 +6,7 @@ const WebSocket = require("ws");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const latest = new Map();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
@@ -24,17 +25,28 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    const payload = JSON.stringify({
+    const room = state.room || "default";
+    ws.room = room;
+
+    if (state.type === "join") {
+      ws.send(JSON.stringify(latest.get(room) || { room, timeLeft: 0, running: false, segmentName: "", total: 0, messageText: "" }));
+      return;
+    }
+
+    const payload = {
+      room,
       timeLeft: state.timeLeft,
       running: state.running,
       segmentName: state.segmentName,
       total: state.total,
       messageText: state.messageText
-    });
+    };
+
+    latest.set(room, payload);
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
+        client.send(JSON.stringify(payload));
       }
     });
   });

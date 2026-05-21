@@ -86,7 +86,9 @@
         </div>
       </div>
       <div class="panel" style="grid-column:1/-1">
-        <div class="row" style="justify-content:space-between;margin-top:0"><div class="muted">Display URL</div><div id="connectionStatus" class="status">Connecting</div></div>
+        <div class="row" style="justify-content:space-between;margin-top:0"><div class="muted">Session room</div><div id="connectionStatus" class="status">Connecting</div></div>
+        <div class="row"><input id="roomCode" placeholder="Room code"><button id="newRoom">New</button></div>
+        <div class="muted" style="margin-top:14px">Display URL</div>
         <div class="row"><input id="displayUrl" readonly><button id="copyDisplayUrl">Copy</button></div>
         <div id="nextPreview" class="muted" style="margin-top:14px">Next: none</div>
         <div class="muted">Segment queue</div>
@@ -110,6 +112,7 @@
   </main>
   <main id="display" class="display">
     <div>
+      <div id="displayStatus" class="muted">Connecting</div>
       <div id="displayMessage" class="display-message"></div>
       <div id="displaySegment" class="segment">Waiting for timer</div>
       <div id="displayTime" class="timer normal">00:00<span class="dot"></span></div>
@@ -133,6 +136,7 @@
     const presets = [["1m",60],["2m",120],["5m",300],["10m",600],["15m",900],["30m",1800],["1h",3600]];
     const quickMessages = ["Wrap up", "30 seconds", "Pause", "Mic issue", "Great point"];
     const freeEndsAt = Date.now() + 5 * 60 * 1000;
+    let room = getRoom();
     let total = 0, timeLeft = 0, running = false, segmentName = "", messageText = "", active = -1, timer = null;
     let queue = loadQueue();
 
@@ -140,8 +144,27 @@
     function parseTime(v) { const m = /^(\d{1,3}):([0-5]\d)$/.exec(v.trim()); return m ? (+m[1] * 60 + +m[2]) : 0; }
     function tone(s) { return s <= 30 ? "danger" : s <= 60 ? "warning" : "normal"; }
     function setTime(seconds, name = "Custom") { total = timeLeft = seconds; segmentName = name; running = false; sync(); renderControl(); }
-    function state() { return { timeLeft, running, segmentName, total, messageText }; }
+    function state() { return { room, timeLeft, running, segmentName, total, messageText }; }
     function sync() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state())); }
+    function joinRoom() { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "join", room })); }
+    function isDisplay() { return location.hash.startsWith("#display"); }
+    function getRoom() {
+      const params = new URLSearchParams(window.location.search);
+      const code = (params.get("room") || makeRoom()).toLowerCase().replace(/[^a-z0-9-]/g, "");
+      localStorage.setItem("podtimerRoom", code);
+      return code;
+    }
+    function makeRoom() { return Math.random().toString(36).slice(2, 8); }
+    function displayUrl() { return `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(room)}#display`; }
+    function setRoom(code) {
+      room = (code || makeRoom()).toLowerCase().replace(/[^a-z0-9-]/g, "") || makeRoom();
+      localStorage.setItem("podtimerRoom", room);
+      history.replaceState(null, "", `${window.location.pathname}?room=${encodeURIComponent(room)}${window.location.hash || "#control"}`);
+      $("roomCode").value = room;
+      $("displayUrl").value = displayUrl();
+      joinRoom();
+      if (!isDisplay()) sync();
+    }
     function loadQueue() {
       try {
         const saved = JSON.parse(localStorage.getItem("podtimerQueue"));
@@ -155,12 +178,13 @@
     function setStatus(text, cls) {
       $("connectionStatus").textContent = text;
       $("connectionStatus").className = `status ${cls}`;
+      $("displayStatus").textContent = text;
     }
-    function paywallOpen() { return $("paywall").classList.contains("show") && location.hash !== "#display"; }
+    function paywallOpen() { return $("paywall").classList.contains("show") && !isDisplay(); }
     function renderPaywall() {
       const freeLeft = Math.max(0, Math.ceil((freeEndsAt - Date.now()) / 1000));
       $("freeBanner").textContent = `${Math.ceil(freeLeft / 60)} min free remaining`;
-      $("paywall").classList.toggle("show", freeLeft === 0 && location.hash !== "#display");
+      $("paywall").classList.toggle("show", freeLeft === 0 && !isDisplay());
       if (freeLeft === 0) { running = false; renderControl(); sync(); }
     }
 
@@ -223,7 +247,11 @@
     $("addSeg").onclick = () => { if (paywallOpen()) return; const sec = parseTime($("segTime").value), name = $("segName").value.trim(); if (sec && name) { queue.push({ name, seconds: sec }); saveQueue(); $("segName").value = $("segTime").value = ""; renderControl(); } };
     $("start").onclick = toggle; $("reset").onclick = () => { if (!paywallOpen()) setTime(total, segmentName || "Custom"); };
     $("next").onclick = () => { if (!paywallOpen()) nextSegment(); }; $("prev").onclick = () => { if (!paywallOpen()) prevSegment(); };
-    $("displayUrl").value = `${window.location.origin}${window.location.pathname}#display`;
+    $("roomCode").value = room;
+    $("displayUrl").value = displayUrl();
+    $("roomCode").onchange = () => setRoom($("roomCode").value);
+    $("newRoom").onclick = () => setRoom(makeRoom());
+    setRoom(room);
     $("copyDisplayUrl").onclick = async () => {
       await navigator.clipboard.writeText($("displayUrl").value);
       $("copyDisplayUrl").textContent = "Copied";
@@ -234,13 +262,20 @@
     $("showMessage").onclick = () => { if (paywallOpen()) return; messageText = $("messageText").value.trim(); saveMessageDraft(); sync(); };
     $("clearMessage").onclick = () => { if (paywallOpen()) return; messageText = ""; $("messageText").value = ""; saveMessageDraft(); sync(); };
     document.onkeydown = (e) => { if (e.target.matches("input") || paywallOpen()) return; if (e.code === "Space") { e.preventDefault(); toggle(); } if (e.key.toLowerCase() === "r") setTime(total, segmentName || "Custom"); if (e.key === "ArrowRight") nextSegment(); if (e.key === "ArrowLeft") prevSegment(); };
-    window.onhashchange = () => { const showDisplay = location.hash === "#display"; $("control").style.display = showDisplay ? "none" : "block"; $("display").style.display = showDisplay ? "grid" : "none"; renderPaywall(); };
-    ws.onmessage = (e) => { if (location.hash === "#display") renderDisplay(JSON.parse(e.data)); };
-    ws.onopen = () => { setStatus("Connected", "connected"); sync(); };
+    window.onhashchange = () => { const showDisplay = isDisplay(); $("control").style.display = showDisplay ? "none" : "block"; $("display").style.display = showDisplay ? "grid" : "none"; renderPaywall(); joinRoom(); };
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.room === room) {
+        if (isDisplay()) renderDisplay(data);
+        if (!isDisplay() && data.timeLeft !== undefined) renderControl();
+      }
+    };
+    ws.onopen = () => { setStatus("Connected", "connected"); joinRoom(); if (!isDisplay()) sync(); };
     ws.onclose = () => setStatus("Offline", "offline");
     ws.onerror = () => setStatus("Connection error", "offline");
     setInterval(tick, 1000);
     setInterval(renderPaywall, 1000);
+    setInterval(() => { if (!isDisplay()) sync(); }, 1000);
     $("messageText").value = localStorage.getItem("podtimerMessageDraft") || "";
     loadSegment(0);
     renderPaywall();
