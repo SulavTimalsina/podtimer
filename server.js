@@ -28,7 +28,8 @@ wss.on("connection", (ws) => {
       timeLeft: state.timeLeft,
       running: state.running,
       segmentName: state.segmentName,
-      total: state.total
+      total: state.total,
+      messageText: state.messageText
     });
 
     wss.clients.forEach((client) => {
